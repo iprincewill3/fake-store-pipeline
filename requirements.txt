@@ -1,0 +1,7 @@
+pandas
+requests
+pyarrow
+fastparquet
+prefect
+SQLAlchemy
+scikit-learn
