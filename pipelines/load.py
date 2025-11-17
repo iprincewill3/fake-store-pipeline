@@ -1,18 +1,24 @@
+# pipelines/load.py
 from pathlib import Path
 import pandas as pd
 
-def to_parquet(df: pd.DataFrame) -> Path:
+def to_parquet_and_csv(df: pd.DataFrame):
     """
-    Save the cleaned DataFrame to data/curated/products.parquet and return the file path.
+    Writes curated data under data/curated/ as:
+      - products.parquet  (for Power BI Desktop)
+      - products.csv      (for cloud / web usage)
+    Returns both paths.
     """
-    # Define where to save the final dataset
-    out = Path("data/curated") / "products.parquet"
+    out_dir = Path("data/curated")
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Make sure the folder exists before saving
-    out.parent.mkdir(parents=True, exist_ok=True)
+    parquet_path = out_dir / "products.parquet"
+    csv_path = out_dir / "products.csv"
 
-    # Save the DataFrame as a Parquet file (a compact, fast format)
-    df.to_parquet(out, index=False)
+    # Main BI file – this is already in use in Power BI Desktop
+    df.to_parquet(parquet_path, index=False)
 
-    # Return the file path so the next step can use it
-    return out
+    # Extra copy – for GitHub Actions / web
+    df.to_csv(csv_path, index=False)
+
+    return parquet_path, csv_path

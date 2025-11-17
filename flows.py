@@ -1,7 +1,8 @@
 from prefect import flow, task
 from pipelines.extract import extract_products
 from pipelines.transform import normalize_products
-from pipelines.load import to_parquet
+from pipelines.load import to_parquet_and_csv  # ⬅ use new function
+
 
 @task
 def extract_t():
@@ -13,14 +14,16 @@ def transform_t(raw_path):
 
 @task
 def load_t(df):
-    return to_parquet(df)
+    return to_parquet_and_csv(df)
+
 
 @flow(name="fake-store-etl")
 def run_pipeline():
     raw_path = extract_t()
     df = transform_t(raw_path)
-    pq = load_t(df)
-    print(f"ETL Flow complete. Output: {pq}")   # <— no emoji
+    parquet_path, csv_path = load_t(df)
+    print(f"ETL complete → {parquet_path} and {csv_path}")
+
 
 if __name__ == "__main__":
     run_pipeline()
