@@ -1,9 +1,0 @@
-00:01:00.661 | INFO    | prefect - Starting temporary server on http://127.0.0.1:8533
-See https://docs.prefect.io/v3/concepts/server#how-to-guides for more information on running a dedicated Prefect server.
-00:01:04.954 | INFO    | Flow run 'wondrous-ibex' - Beginning flow run 'wondrous-ibex' for flow 'fake-store-etl'
-00:01:05.174 | INFO    | Task run 'extract_t-4b8' - Finished in state Completed()
-00:01:05.215 | INFO    | Task run 'transform_t-112' - Finished in state Completed()
-00:01:05.327 | INFO    | Task run 'load_t-45e' - Finished in state Completed()
-00:01:05.345 | INFO    | Flow run 'wondrous-ibex' - Finished in state Completed()
-ETL Flow complete. Output: data\curated\products.parquet
-00:01:05.361 | INFO    | prefect - Stopping temporary server on http://127.0.0.1:8533
