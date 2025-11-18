@@ -31,11 +31,11 @@ jobs:
 
       - name: Publish CSV for web / Power BI
         run: |
-          mkdir -p public/data
-          cp data/curated/products.csv public/data/products.csv
+          mkdir -p public
+          cp data/curated/products.csv public/products.csv
           date -u +"%Y-%m-%d %H:%M:%S UTC" > public/last_updated.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/data/products.csv public/last_updated.txt || true
+          git add public/products.csv public/last_updated.txt || true
           git commit -m "Auto-update CSV on $(date -u +'%Y-%m-%d %H:%M:%S') UTC" || echo "No changes"
           git push
