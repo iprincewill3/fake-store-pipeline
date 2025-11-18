@@ -1,3 +1,5 @@
+# Small change to trigger GitHub Actions
+
 from prefect import flow, task
 from pipelines.extract import extract_products
 from pipelines.transform import normalize_products
