@@ -93,7 +93,83 @@ fake-store-pipeline/
 * If the API responds with an error (e.g. 403, 500, timeout), the pipeline loads sample_data/products_seed.json instead.
 
 * The raw payload is stored under data/raw/ with a timestamped filename.
-  
+
+Here is the code for extracting the data from Fake Store API:
+
+```python
+# pipelines/extract.py
+import os
+import json
+import time
+from pathlib import Path
+
+import requests
+from requests import HTTPError, RequestException
+
+PRODUCTS_URL = "https://fakestoreapi.com/products"
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+}
+
+
+def _write_snapshot(payload) -> Path:
+    """
+    Helper: write the given payload to data/raw/products_<timestamp>.json
+    and return the path.
+    """
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    out = Path("data/raw") / f"products_{ts}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    return out
+
+
+def _load_seed_payload() -> list:
+    """
+    Load the static snapshot we commit to the repo.
+    Used as a fallback when the live API is unavailable.
+    """
+    snapshot_path = Path("sample_data/products_seed.json")
+    return json.loads(snapshot_path.read_text())
+
+
+def extract_products() -> Path:
+    """
+    Extract products data.
+
+    - On GitHub Actions (GITHUB_ACTIONS="true"): always use the snapshot,
+      to avoid API blocking or rate limits.
+    - Locally: try the live API first; if it fails, fall back to the snapshot.
+    """
+    # Detect GitHub Actions environment
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        print("GITHUB_ACTIONS detected → using snapshot data only.")
+        payload = _load_seed_payload()
+        return _write_snapshot(payload)
+
+    # Local run: try live API with graceful fallback
+    try:
+        print(f"Requesting live data from {PRODUCTS_URL} ...")
+        resp = requests.get(PRODUCTS_URL, timeout=30, headers=HEADERS)
+        resp.raise_for_status()
+        data = resp.json()
+        print(f"✅ Live API call succeeded, got {len(data)} records.")
+        return _write_snapshot(data)
+
+    except (HTTPError, RequestException) as e:
+        print(f"⚠ Live API call failed: {e}")
+        print("   Falling back to snapshot data from sample_data/products_seed.json ...")
+        payload = _load_seed_payload()
+        return _write_snapshot(payload)
+
+```
+
 
 ### 2. Transform:
 
@@ -107,6 +183,52 @@ fake-store-pipeline/
 
 * Drops duplicate products and resets the index.
 
+Here is the code for transforming the extracted data:
+
+```python
+from pathlib import Path
+import pandas as pd
+import json
+
+def normalize_products(raw_path: Path) -> pd.DataFrame:
+    """
+    Read the raw JSON file, flatten to a table, clean columns/types,
+    add a simple derived metric, and return a DataFrame.
+    """
+    # Load the JSON file into Python
+    payload = json.loads(Path(raw_path).read_text())
+
+    # Convert nested JSON data into a flat table
+    df = pd.json_normalize(payload)
+
+    # Clean column names (lowercase, replace spaces and dots with underscores)
+    df.columns = [
+        c.strip().lower().replace(" ", "_").replace(".", "_") for c in df.columns
+    ]
+
+    # Make sure these important columns always exist
+    required = ["id", "title", "price", "category", "rating_rate", "rating_count"]
+    for col in required:
+        if col not in df.columns:
+            df[col] = None
+
+    # Convert data to correct types
+    df["price"] = pd.to_numeric(df["price"], errors="coerce")
+    df["rating_rate"] = pd.to_numeric(df.get("rating_rate"), errors="coerce")
+    df["rating_count"] = pd.to_numeric(df.get("rating_count"), errors="coerce")
+    df["title"] = df["title"].astype("string")
+    df["category"] = df["category"].astype("string")
+
+    # Example derived metric: price with 20% VAT added
+    df["price_with_vat"] = (df["price"] * 1.20).round(2)
+
+    # Remove any duplicates and reset the index
+    df = df.drop_duplicates(subset=["id"]).reset_index(drop=True)
+
+    # Return the cleaned DataFrame
+    return df
+
+```
 
 ### 3. Load:
 
@@ -115,6 +237,36 @@ fake-store-pipeline/
 * Writes a CSV copy to public/products.csv.
 
 * GitHub Actions later commits that CSV and an updated public/last_updated.txt back to the repository.
+
+Here is the code for loading the transformed data:
+
+```python
+# pipelines/load.py
+from pathlib import Path
+import pandas as pd
+
+def to_parquet_and_csv(df: pd.DataFrame):
+    """
+    Writes curated data under data/curated/ as:
+      - products.parquet  (for Power BI Desktop)
+      - products.csv      (for cloud / web usage)
+    Returns both paths.
+    """
+    out_dir = Path("data/curated")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    parquet_path = out_dir / "products.parquet"
+    csv_path = out_dir / "products.csv"
+
+    # Main BI file – this is already in use in Power BI Desktop
+    df.to_parquet(parquet_path, index=False)
+
+    # Extra copy – for GitHub Actions / web
+    df.to_csv(csv_path, index=False)
+
+    return parquet_path, csv_path
+
+```
 
 
 ## Cloud Automation (GitHub Actions)
@@ -137,7 +289,7 @@ At a high level, it:
 
 This means the repository always contains a fresh, ready-to-use CSV that external tools (like Power BI) can consume over HTTP.
 
-Here is the Python code for the ETL process. Full Python script available upon request.
+Here is the Python code for the ETL process:
 
 ```python
 # flows.py showing functions and code for ETL pipeline
